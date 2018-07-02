@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  FunctionOne:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: one
+      Runtime: go1.x
+      CodeUri: pkg/one.zip
+      Timeout: 60
+  FunctionTwo:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: two
+      Runtime: go1.x
+      CodeUri: pkg/two.zip
+      Timeout: 60
+
+  StateMachineExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service:
+                - !Sub states.${AWS::Region}.amazonaws.com
+      Path: /
+      Policies:
+        - PolicyName: StatesExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource: "*"
+
+  StateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      RoleArn:
+        !GetAtt StateMachineExecutionRole.Arn
+      DefinitionString:
+        !Sub
+          - |-
+            {
+              "Comment": "Example State Machine.",
+              "StartAt": "One",
+              "States": {
+                "One": {
+                  "Type": "Task",
+                  "Resource": "${LambdaOneArn}",
+                  "Next": "Two"
+                },
+                "Two": {
+                  "Type": "Task",
+                  "Resource": "${LambdaTwoArn}",
+                  "End": true
+                }
+              }
+            }
+          - LambdaOneArn:
+              !GetAtt FunctionOne.Arn
+            LambdaTwoArn:
+              !GetAtt FunctionTwo.Arn
